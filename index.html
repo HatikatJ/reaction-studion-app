@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mon Studio de Réaction Personnalisé</title>
+    <style>
+        body { font-family: sans-serif; background: #121212; color: #fff; text-align: center; margin: 0; padding: 20px; }
+        h1 { font-size: 1.5rem; color: #4ade80; }
+        p.subtitle { color: #aaa; margin-top: -10px; margin-bottom: 20px; font-size: 0.9rem; }
+        
+        .studio-container { max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+        
+        .control-panel { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; background: #1f1f1f; padding: 15px; border-radius: 12px; }
+        
+        button { background: #333; color: white; border: 1px solid #444; padding: 10px 20px; border-radius: 8px; cursor: pointer; transition: 0.2s; font-size: 0.9rem; }
+        button:hover:not(:disabled) { background: #444; border-color: #555; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        button#startBtn { background: #22c55e; border-color: #16a34a; }
+        button#startBtn:hover { background: #16a34a; }
+        button#stopBtn { background: #ef4444; border-color: #dc2626; }
+        button#stopBtn:hover { background: #dc2626; }
+        
+        .layout-options { display: flex; gap: 10px; }
+        input[type="file"] { background: #333; padding: 10px; border-radius: 8px; font-size: 0.9rem; border: 1px solid #444; }
+
+        .media-area { display: flex; gap: 10px; justify-content: center; width: 100%; max-width: 900px; margin: 0 auto; }
+        .media-box { flex: 1; min-width: 200px; background: #000; border: 1px solid #333; border-radius: 12px; overflow: hidden; display: flex; align-items: center; justify-content: center; aspect-ratio: 16/9; }
+        
+        video { width: 100%; height: 100%; object-fit: cover; }
+        video#sourceVideo { object-fit: contain; } /* La vidéo source ne doit pas être rognée */
+        
+        /* Layout Mobile (Empilé verticalement par défaut) */
+        @media (max-width: 768px) {
+            .media-area { flex-direction: column; }
+            .media-box { width: 100%; }
+        }
+
+        /* Classes de Layout dynamiques */
+        .layout-stack { flex-direction: column !important; }
+        .layout-stack .media-box { width: 100% !important; }
+
+        .layout-pip .media-area { position: relative; }
+        .layout-pip #sourceVideoBox { width: 100% !important; flex: none; z-index: 1; }
+        .layout-pip #faceCamBox { position: absolute; bottom: 20px; right: 20px; width: 30%; aspect-ratio: 16/9; z-index: 2; border: 2px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+    </style>
+</head>
+<body>
+
+    <h1>Mon Studio de Réaction</h1>
+    <p class="subtitle">100% Web, Sans Compte, Maîtrise Totale</p>
+    
+    <div class="studio-container">
+        
+        <div class="control-panel">
+            <input type="file" id="fileInput" accept="video/*">
+            <button id="cameraBtn">Activer Caméra</button>
+            <div class="layout-options">
+                <button id="layoutSplitBtn">Côte à côte</button>
+                <button id="layoutStackBtn">Empilé</button>
+                <button id="layoutPipBtn">Incrustation (PiP)</button>
+            </div>
+            <button id="startBtn" disabled>▶ Démarrer l'enregistrement</button>
+            <button id="stopBtn" disabled>■ Arrêter</button>
+        </div>
+
+        <div class="media-area" id="mediaArea">
+            <div class="media-box" id="sourceVideoBox">
+                <p style="color: #666; font-size: 0.8rem;">Charge une vidéo d'abord</p>
+                <video id="sourceVideo" style="display: none;"></video>
+            </div>
+            <div class="media-box" id="faceCamBox">
+                <p style="color: #666; font-size: 0.8rem;">Active ta caméra</p>
+                <video id="faceCam" autoplay playsinline muted style="display: none;"></video>
+            </div>
+        </div>
+
+        <div style="background: #1f1f1f; padding: 20px; border-radius: 12px; margin-top: 20px;">
+            <p style="margin-top: 0;">Contrôle de la Réaction :</p>
+            <button id="reactPausePlayBtn" style="font-size: 1.2rem; padding: 15px 30px;" disabled>⏯ Pause / Play sur la Vidéo Source</button>
+            <p style="font-size: 0.8rem; color: #888; margin-bottom: 0;">(Ta caméra continue de tourner !)</p>
+        </div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const cameraBtn = document.getElementById('cameraBtn');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const reactPausePlayBtn = document.getElementById('reactPausePlayBtn');
+        
+        const sourceVideoBox = document.getElementById('sourceVideoBox');
+        const faceCamBox = document.getElementById('faceCamBox');
+        const sourceVideo = document.getElementById('sourceVideo');
+        const faceCam = document.getElementById('faceCam');
+        const mediaArea = document.getElementById('mediaArea');
+        
+        const layoutSplitBtn = document.getElementById('layoutSplitBtn');
+        const layoutStackBtn = document.getElementById('layoutStackBtn');
+        const layoutPipBtn = document.getElementById('layoutPipBtn');
+
+        let mediaRecorder;
+        let recordedChunks = [];
+        let cameraStream;
+        let combinedStream;
+
+        // --- 1. Gestion du Fichier Vidéo ---
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                sourceVideo.src = URL.createObjectURL(file);
+                sourceVideo.style.display = 'block';
+                sourceVideoBox.querySelector('p').style.display = 'none';
+                checkReadyState();
+            }
+        });
+
+        // --- 2. Gestion de la Caméra ---
+        cameraBtn.addEventListener('click', async () => {
+            try {
+                cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                faceCam.srcObject = cameraStream;
+                faceCam.style.display = 'block';
+                faceCamBox.querySelector('p').style.display = 'none';
+                cameraBtn.disabled = true;
+                cameraBtn.innerText = 'Caméra Activée ✅';
+                checkReadyState();
+            } catch (err) {
+                console.error("Erreur d'accès à la caméra:", err);
+                alert("Erreur: Impossible d'accéder à la caméra ou au micro. Vérifiez les permissions.");
+            }
+        });
+
+        // --- 3. Vérification si prêt ---
+        function checkReadyState() {
+            if (sourceVideo.src && cameraStream) {
+                startBtn.disabled = false;
+                reactPausePlayBtn.disabled = false;
+            }
+        }
+
+        // --- 4. Gestion des Layouts ---
+        function clearLayouts() { mediaArea.className = "media-area"; }
+        layoutSplitBtn.addEventListener('click', () => { clearLayouts(); }); // Par défaut en paysage
+        layoutStackBtn.addEventListener('click', () => { clearLayouts(); mediaArea.classList.add('layout-stack'); });
+        layoutPipBtn.addEventListener('click', () => { clearLayouts(); mediaArea.classList.add('layout-pip'); });
+
+        // --- 5. Le Contrôle Clé : Pause/Play sans couper l'enregistrement ---
+        reactPausePlayBtn.addEventListener('click', () => {
+            if (sourceVideo.paused) {
+                sourceVideo.play();
+                reactPausePlayBtn.innerText = '⏯ Pause la Vidéo Source';
+            } else {
+                sourceVideo.pause();
+                reactPausePlayBtn.innerText = '▶ Relancer la Vidéo Source';
+            }
+        });
+
+        // --- 6. Gestion de l'Enregistrement ---
+        startBtn.addEventListener('click', () => {
+            recordedChunks = [];
+            
+            // Création d'un stream combiné Canvas/Audio
+            const canvas = document.createElement('canvas');
+            canvas.width = 1280; // Résolution HD pour la sortie
+            canvas.height = 720;
+            const ctx = canvas.getContext('2d');
+
+            // Fonction de mixage vidéo sur le canvas
+            function drawFrame() {
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                if (mediaArea.classList.contains('layout-pip')) {
+                    // PiP Logic
+                    ctx.drawImage(sourceVideo, 0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(faceCam, canvas.width - (canvas.width*0.35) - 20, canvas.height - (canvas.height*0.35) - 20, canvas.width*0.35, canvas.height*0.35);
+                } else if (mediaArea.classList.contains('layout-stack')) {
+                    // Stack Logic (50/50 vertical)
+                    ctx.drawImage(sourceVideo, 0, 0, canvas.width, canvas.height/2);
+                    ctx.drawImage(faceCam, 0, canvas.height/2, canvas.width, canvas.height/2);
+                } else {
+                    // Split Logic (50/50 horizontal)
+                    ctx.drawImage(sourceVideo, 0, 0, canvas.width/2, canvas.height);
+                    ctx.drawImage(faceCam, canvas.width/2, 0, canvas.width/2, canvas.height);
+                }
+                
+                if (mediaRecorder && mediaRecorder.state === 'recording') {
+                    requestAnimationFrame(drawFrame);
+                }
+            }
+            
+            drawFrame(); // Lancer le dessin
+            combinedStream = canvas.captureStream(30); // Capturer à 30fps
+
+            // Mixage Audio (Micro + Son de la vidéo source)
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const sourceVideoNode = audioCtx.createMediaElementSource(sourceVideo);
+            const micNode = audioCtx.createMediaStreamSource(cameraStream);
+            const destination = audioCtx.createMediaStreamDestination();
+            
+            sourceVideoNode.connect(destination);
+            micNode.connect(destination);
+            
+            // Ajouter la piste audio mixée au stream combiné
+            combinedStream.addTrack(destination.stream.getAudioTracks()[0]);
+
+            // Initialiser le Recorder
+            mediaRecorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm;codecs=vp9,opus' });
+            
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                
+                // Créer un lien de téléchargement automatique
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = `reaction_${new Date().toISOString().slice(0,19)}.webm`;
+                document.body.appendChild(a);
+                a.click();
+                URL.revokeObjectURL(url);
+                a.remove();
+                
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                reactPausePlayBtn.disabled = true;
+                startBtn.innerText = '▶ Démarrer un nouvel enregistrement';
+            };
+
+            // Démarrer
+            mediaRecorder.start();
+            sourceVideo.play();
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            reactPausePlayBtn.innerText = '⏯ Pause la Vidéo Source';
+        });
+
+        stopBtn.addEventListener('click', () => {
+            mediaRecorder.stop();
+            sourceVideo.pause();
+        });
+
+    </script>
+</body>
+</html>
