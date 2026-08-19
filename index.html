@@ -9,13 +9,13 @@
 <body>
   <header class="app-header">
     <h1>🎬 Reaction Studio</h1>
-    <span class="badge">v1.1.0</span>
+    <span class="badge">v1.2.0</span>
   </header>
 
   <main class="studio-container">
     <!-- Zone de prévisualisation vidéo -->
     <section class="video-preview-card">
-      <div class="video-wrapper">
+      <div class="video-wrapper" id="videoWrapper">
         <video id="mainVideo" class="video-player" playsinline controls></video>
         <video id="webcamVideo" class="webcam-overlay" autoplay playsinline muted></video>
       </div>
@@ -23,7 +23,7 @@
 
     <!-- Panneau de commandes -->
     <section class="controls-card">
-      <h2>Contrôles & Réglages</h2>
+      <h2>Contrôles</h2>
       
       <div class="control-group">
         <label for="videoInput" class="btn btn-primary">
@@ -38,15 +38,7 @@
         </button>
       </div>
 
-      <div class="control-group">
-        <label for="webcamPosition">Position de la webcam :</label>
-        <select id="webcamPosition" class="select-input">
-          <option value="bottom-right">Bas Droite</option>
-          <option value="bottom-left">Bas Gauche</option>
-          <option value="top-right">Haut Droite</option>
-          <option value="top-left">Haut Gauche</option>
-        </select>
-      </div>
+      <p class="hint">💡 <em>Astuce : Une fois la webcam activée, glisse-la sur la vidéo avec la souris ou ton doigt pour la placer où tu veux !</em></p>
     </section>
   </main>
 

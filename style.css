@@ -84,6 +84,29 @@ body {
 
 .webcam-overlay {
   position: absolute;
+  top: 20px;
+  left: 20px;
+  width: 25%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 2px solid var(--accent-color);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+  display: none;
+  cursor: move;
+  user-select: none;
+  touch-action: none; /* Indispensable pour le drag sur mobile */
+}
+
+.hint {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-top: 15px;
+  line-height: 1.4;
+}
+
+/*.webcam-overlay {
+  position: absolute;
   width: 25%;
   aspect-ratio: 4 / 3;
   object-fit: cover;
@@ -92,9 +115,9 @@ body {
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
   transition: all 0.3s ease;
   display: none;
-}
+}*/
 
-/* Positions de la webcam */
+/* Positions de la webcam 
 .webcam-overlay.bottom-right { bottom: 12px; right: 12px; }
 .webcam-overlay.bottom-left  { bottom: 12px; left: 12px; }
 .webcam-overlay.top-right    { top: 12px; right: 12px; }
@@ -155,4 +178,4 @@ body {
   color: white;
   border: 1px solid #475569;
   outline: none;
-}
+}*/
