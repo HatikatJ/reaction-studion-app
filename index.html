@@ -9,36 +9,49 @@
 <body>
   <header class="app-header">
     <h1>🎬 Reaction Studio</h1>
-    <span class="badge">v1.2.0</span>
+    <span class="badge">v1.3.0</span>
   </header>
 
   <main class="studio-container">
-    <!-- Zone de prévisualisation vidéo -->
+    <!-- Zone de rendu / Prévisualisation -->
     <section class="video-preview-card">
       <div class="video-wrapper" id="videoWrapper">
-        <video id="mainVideo" class="video-player" playsinline controls></video>
-        <video id="webcamVideo" class="webcam-overlay" autoplay playsinline muted></video>
+        <canvas id="studioCanvas"></canvas>
+        <!-- Vidéos masquées servant de sources de flux au Canvas -->
+        <video id="mainVideo" playsinline style="display:none;"></video>
+        <video id="webcamVideo" autoplay playsinline muted style="display:none;"></video>
       </div>
     </section>
 
     <!-- Panneau de commandes -->
     <section class="controls-card">
-      <h2>Contrôles</h2>
-      
-      <div class="control-group">
+      <h2>1. Fichiers & Caméra</h2>
+      <div class="control-group dual-buttons">
         <label for="videoInput" class="btn btn-primary">
-          📂 Charger une vidéo
+          📂 Charger vidéo
         </label>
         <input type="file" id="videoInput" accept="video/*" hidden>
-      </div>
 
-      <div class="control-group">
         <button id="toggleWebcamBtn" class="btn btn-secondary">
-          📷 Activer la webcam
+          📷 Activer webcam
         </button>
       </div>
 
-      <p class="hint">💡 <em>Astuce : Une fois la webcam activée, glisse-la sur la vidéo avec la souris ou ton doigt pour la placer où tu veux !</em></p>
+      <h2>2. Disposition de l'écran</h2>
+      <div class="layout-selector">
+        <button class="btn-layout active" data-layout="pip">🖼️ Incrusté</button>
+        <button class="btn-layout" data-layout="cam-full">👤 Moi en grand</button>
+        <button class="btn-layout" data-layout="video-full">🎬 Vidéo seule</button>
+        <button class="btn-layout" data-layout="split-h">⬅️➡️ Côte à côte</button>
+        <button class="btn-layout" data-layout="split-v">⬆️⬇️ Haut / Bas</button>
+      </div>
+
+      <h2>3. Enregistrement</h2>
+      <div class="control-group">
+        <button id="recordBtn" class="btn btn-record" disabled>
+          🔴 Démarrer l'enregistrement
+        </button>
+      </div>
     </section>
   </main>
 

@@ -1,89 +1,153 @@
-// Éléments du DOM
 const videoInput = document.getElementById('videoInput');
 const mainVideo = document.getElementById('mainVideo');
-const toggleWebcamBtn = document.getElementById('toggleWebcamBtn');
 const webcamVideo = document.getElementById('webcamVideo');
-const videoWrapper = document.getElementById('videoWrapper');
+const toggleWebcamBtn = document.getElementById('toggleWebcamBtn');
+const recordBtn = document.getElementById('recordBtn');
+const canvas = document.getElementById('studioCanvas');
+const ctx = canvas.getContext('2d');
 
 let webcamStream = null;
-let isDragging = false;
-let startX, startY, initialLeft, initialTop;
+let currentLayout = 'pip';
+let mediaRecorder = null;
+let recordedChunks = [];
+let isRecording = false;
 
-// Chargement de la vidéo locale
-videoInput.addEventListener('change', (event) => {
-  const file = event.target.files[0];
+// Taille fixe du canvas
+canvas.width = 1280;
+canvas.height = 720;
+
+// Chargement de la vidéo
+videoInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
   if (file) {
-    const videoURL = URL.createObjectURL(file);
-    mainVideo.src = videoURL;
+    mainVideo.src = URL.createObjectURL(file);
+    mainVideo.play();
+    updateRecordButtonState();
   }
 });
 
-// Activation / Désactivation de la webcam
+// Activer / Désactiver webcam
 toggleWebcamBtn.addEventListener('click', async () => {
   if (webcamStream) {
-    webcamStream.getTracks().forEach(track => track.stop());
+    webcamStream.getTracks().forEach(t => t.stop());
     webcamStream = null;
-    webcamVideo.style.display = 'none';
-    toggleWebcamBtn.textContent = '📷 Activer la webcam';
+    toggleWebcamBtn.textContent = '📷 Activer webcam';
   } else {
     try {
-      webcamStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      webcamStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       webcamVideo.srcObject = webcamStream;
-      webcamVideo.style.display = 'block';
-      toggleWebcamBtn.textContent = '🚫 Désactiver la webcam';
+      toggleWebcamBtn.textContent = '🚫 Désactiver webcam';
     } catch (err) {
-      alert("Impossible d'accéder à la webcam : " + err.message);
+      alert("Erreur webcam : " + err.message);
     }
+  }
+  updateRecordButtonState();
+});
+
+// Changement de layout
+document.querySelectorAll('.btn-layout').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    document.querySelectorAll('.btn-layout').forEach(b => b.classList.remove('active'));
+    e.target.classList.add('active');
+    currentLayout = e.target.dataset.layout;
+  });
+});
+
+function updateRecordButtonState() {
+  recordBtn.disabled = !(mainVideo.src || webcamStream);
+}
+
+// boucle de rendu du Canvas (60 FPS)
+function drawFrame() {
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const w = canvas.width;
+  const h = canvas.height;
+
+  switch (currentLayout) {
+    case 'pip': // Vidéo plein écran + webcam incrustée
+      if (mainVideo.readyState >= 2) ctx.drawImage(mainVideo, 0, 0, w, h);
+      if (webcamStream && webcamVideo.readyState >= 2) {
+        ctx.drawImage(webcamVideo, w - 320 - 20, h - 240 - 20, 320, 240);
+      }
+      break;
+
+    case 'cam-full': // Webcam seule
+      if (webcamStream && webcamVideo.readyState >= 2) ctx.drawImage(webcamVideo, 0, 0, w, h);
+      break;
+
+    case 'video-full': // Vidéo seule
+      if (mainVideo.readyState >= 2) ctx.drawImage(mainVideo, 0, 0, w, h);
+      break;
+
+    case 'split-h': // Côte à côte
+      if (mainVideo.readyState >= 2) ctx.drawImage(mainVideo, 0, 0, w / 2, h);
+      if (webcamStream && webcamVideo.readyState >= 2) ctx.drawImage(webcamVideo, w / 2, 0, w / 2, h);
+      break;
+
+    case 'split-v': // Haut / Bas
+      if (mainVideo.readyState >= 2) ctx.drawImage(mainVideo, 0, 0, w, h / 2);
+      if (webcamStream && webcamVideo.readyState >= 2) ctx.drawImage(webcamVideo, 0, h / 2, w, h / 2);
+      break;
+  }
+
+  requestAnimationFrame(drawFrame);
+}
+
+drawFrame();
+
+// --- LOGIQUE D'ENREGISTREMENT ---
+
+recordBtn.addEventListener('click', () => {
+  if (isRecording) {
+    stopRecording();
+  } else {
+    startRecording();
   }
 });
 
-// --- LOGIQUE DRAG & DROP (Souris + Toucher) ---
+function startRecording() {
+  recordedChunks = [];
+  const canvasStream = canvas.captureStream(30);
 
-const startDrag = (e) => {
-  isDragging = true;
-  const clientX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX;
-  const clientY = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY;
+  // Mixer le son de la vidéo et du micro si disponibles
+  const audioTracks = [];
+  if (webcamStream && webcamStream.getAudioTracks().length > 0) {
+    audioTracks.push(...webcamStream.getAudioTracks());
+  }
 
-  startX = clientX;
-  startY = clientY;
-  initialLeft = webcamVideo.offsetLeft;
-  initialTop = webcamVideo.offsetTop;
-};
+  const combinedStream = new MediaStream([
+    ...canvasStream.getVideoTracks(),
+    ...audioTracks
+  ]);
 
-const doDrag = (e) => {
-  if (!isDragging) return;
-  e.preventDefault();
+  mediaRecorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm' });
 
-  const clientX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX;
-  const clientY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY;
+  mediaRecorder.ondataavailable = (e) => {
+    if (e.data.size > 0) recordedChunks.push(e.data);
+  };
 
-  const deltaX = clientX - startX;
-  const deltaY = clientY - startY;
+  mediaRecorder.onstop = downloadVideo;
 
-  let newLeft = initialLeft + deltaX;
-  let newTop = initialTop + deltaY;
+  mediaRecorder.start();
+  isRecording = true;
+  recordBtn.textContent = '⏹ Arrêter et télécharger';
+  recordBtn.classList.add('recording');
+}
 
-  // Limites pour ne pas faire sortir la webcam du cadre de la vidéo
-  const maxLeft = videoWrapper.clientWidth - webcamVideo.clientWidth;
-  const maxTop = videoWrapper.clientHeight - webcamVideo.clientHeight;
+function stopRecording() {
+  mediaRecorder.stop();
+  isRecording = false;
+  recordBtn.textContent = '🔴 Démarrer l\'enregistrement';
+  recordBtn.classList.remove('recording');
+}
 
-  newLeft = Math.max(0, Math.min(newLeft, maxLeft));
-  newTop = Math.max(0, Math.min(newTop, maxTop));
-
-  webcamVideo.style.left = `${newLeft}px`;
-  webcamVideo.style.top = `${newTop}px`;
-};
-
-const stopDrag = () => {
-  isDragging = false;
-};
-
-// Événements Souris
-webcamVideo.addEventListener('mousedown', startDrag);
-window.addEventListener('mousemove', doDrag);
-window.addEventListener('mouseup', stopDrag);
-
-// Événements Touch (Mobile)
-webcamVideo.addEventListener('touchstart', startDrag);
-window.addEventListener('touchmove', doDrag, { passive: false });
-window.addEventListener('touchend', stopDrag);
+function downloadVideo() {
+  const blob = new Blob(recordedChunks, { type: 'video/webm' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `reaction-${Date.now()}.webm`;
+  a.click();
+}
